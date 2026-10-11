@@ -18,17 +18,58 @@
 
 #include "CommandStreamDispatcher.h"
 
+#include "d3d11/D3D11Handles.h"
 #include "d3d11/D3D11SwapChain.h"
+
+#include <backend/PipelineState.h>
 
 #include <utils/Panic.h>
 
 #include <d3d11.h>
+#include <d3dcompiler.h>
 
 #include <algorithm>
 #include <type_traits>
 #include <utility>
 
+#ifdef far
+#undef far
+#endif
+#ifdef near
+#undef near
+#endif
+
 namespace filament::backend {
+
+using Microsoft::WRL::ComPtr;
+
+static DXGI_FORMAT getVertexFormat(ElementType type) {
+    switch (type) {
+        case ElementType::FLOAT: return DXGI_FORMAT_R32_FLOAT;
+        case ElementType::FLOAT2: return DXGI_FORMAT_R32G32_FLOAT;
+        case ElementType::FLOAT3: return DXGI_FORMAT_R32G32B32_FLOAT;
+        case ElementType::FLOAT4: return DXGI_FORMAT_R32G32B32A32_FLOAT;
+        default: PANIC_POSTCONDITION("D3D11 vertex format not implemented");
+    }
+    return DXGI_FORMAT_UNKNOWN;
+}
+
+static ComPtr<ID3DBlob> compileShader(Program::ShaderBlob const& source, char const* target) {
+    FILAMENT_CHECK_PRECONDITION(!source.empty()) << "Missing D3D11 shader source";
+    UINT flags = D3DCOMPILE_ENABLE_STRICTNESS;
+#ifndef NDEBUG
+    flags |= D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+#else
+    flags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
+#endif
+    ComPtr<ID3DBlob> code;
+    ComPtr<ID3DBlob> errors;
+    HRESULT const result = D3DCompile(source.data(), source.size(), nullptr, nullptr, nullptr,
+            "main", target, flags, 0, code.GetAddressOf(), errors.GetAddressOf());
+    FILAMENT_CHECK_POSTCONDITION(SUCCEEDED(result)) << "D3DCompile failed: "
+            << (errors ? static_cast<char const*>(errors->GetBufferPointer()) : "No diagnostics");
+    return code;
+}
 
 static_assert(!std::is_abstract_v<D3D11Driver>, "D3D11 must cover the complete driver interface");
 
@@ -56,6 +97,36 @@ void D3D11Driver::terminate() {
     }
     if (mContext) {
         mContext->ClearState();
+        for (auto handle : mPrograms) {
+            mHandleAllocator.deallocate<D3D11Program>(handle);
+        }
+        mPrograms.clear();
+
+        for (auto handle : mRenderPrimitives) {
+            mHandleAllocator.deallocate<D3D11RenderPrimitive>(handle);
+        }
+        mRenderPrimitives.clear();
+
+        for (auto handle : mIndexBuffers) {
+            mHandleAllocator.deallocate<D3D11IndexBuffer>(handle);
+        }
+        mIndexBuffers.clear();
+
+        for (auto handle : mBufferObjects) {
+            mHandleAllocator.deallocate<D3D11BufferObject>(handle);
+        }
+        mBufferObjects.clear();
+
+        for (auto handle : mVertexBuffers) {
+            mHandleAllocator.deallocate<D3D11VertexBuffer>(handle);
+        }
+        mVertexBuffers.clear();
+
+        for (auto handle : mVertexBufferInfos) {
+            mHandleAllocator.deallocate<D3D11VertexBufferInfo>(handle);
+        }
+        mVertexBufferInfos.clear();
+
         for (auto handle : mSwapChains) {
             mHandleAllocator.deallocate<D3D11SwapChain>(handle);
         }
@@ -66,6 +137,17 @@ void D3D11Driver::terminate() {
         mRenderTargets.clear();
         mCurrentSwapChain = nullptr;
         mRenderPassActive = false;
+        mBoundProgram.clear();
+        mBoundVertexBufferInfo.clear();
+        mBoundPrimitive.clear();
+        if (mRasterizerState) {
+            mRasterizerState->Release();
+            mRasterizerState = nullptr;
+        }
+        if (mDepthStencilState) {
+            mDepthStencilState->Release();
+            mDepthStencilState = nullptr;
+        }
         mContext->Flush();
         mContext->Release();
         mContext = nullptr;
@@ -91,10 +173,12 @@ utils::FixedCapacityVector<ShaderLanguage> D3D11Driver::getShaderLanguages(
 
 Handle<HwStream> D3D11Driver::createStreamNative(void* nativeStream, utils::ImmutableCString tag) {
     PANIC_POSTCONDITION("D3D11::createStreamNative not implemented");
+    return {};
 }
 
 Handle<HwStream> D3D11Driver::createStreamAcquired(utils::ImmutableCString tag) {
     PANIC_POSTCONDITION("D3D11::createStreamAcquired not implemented");
+    return {};
 }
 
 void D3D11Driver::setAcquiredImage(Handle<HwStream> sh, void* image, const math::mat3f& transform,
@@ -108,6 +192,7 @@ void D3D11Driver::setStreamDimensions(Handle<HwStream> sh, uint32_t width, uint3
 
 int64_t D3D11Driver::getStreamTimestamp(Handle<HwStream> sh) {
     PANIC_POSTCONDITION("D3D11::getStreamTimestamp not implemented");
+    return {};
 }
 
 void D3D11Driver::updateStreams(CommandStream* driver) {
@@ -116,10 +201,12 @@ void D3D11Driver::updateStreams(CommandStream* driver) {
 
 FenceStatus D3D11Driver::getFenceStatus(Handle<HwFence> fh) {
     PANIC_POSTCONDITION("D3D11::getFenceStatus not implemented");
+    return {};
 }
 
 FenceStatus D3D11Driver::fenceWait(Handle<HwFence> fh, uint64_t timeout) {
     PANIC_POSTCONDITION("D3D11::fenceWait not implemented");
+    return {};
 }
 
 void D3D11Driver::fenceCancel(FenceHandle fh) {
@@ -133,98 +220,122 @@ void D3D11Driver::getPlatformSync(Handle<HwSync> sh, CallbackHandler* handler,
 
 bool D3D11Driver::isTextureFormatSupported(TextureFormat format) {
     PANIC_POSTCONDITION("D3D11::isTextureFormatSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isTextureSwizzleSupported() {
     PANIC_POSTCONDITION("D3D11::isTextureSwizzleSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isTextureFormatMipmappable(TextureFormat format) {
     PANIC_POSTCONDITION("D3D11::isTextureFormatMipmappable not implemented");
+    return {};
 }
 
 bool D3D11Driver::isTextureFormatFilterable(TextureFormat format) {
     PANIC_POSTCONDITION("D3D11::isTextureFormatFilterable not implemented");
+    return {};
 }
 
 bool D3D11Driver::isRenderTargetFormatSupported(TextureFormat format) {
     PANIC_POSTCONDITION("D3D11::isRenderTargetFormatSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isFrameBufferFetchSupported() {
     PANIC_POSTCONDITION("D3D11::isFrameBufferFetchSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isFrameBufferFetchMultiSampleSupported() {
     PANIC_POSTCONDITION("D3D11::isFrameBufferFetchMultiSampleSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isFrameTimeSupported() {
     PANIC_POSTCONDITION("D3D11::isFrameTimeSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isAutoDepthResolveSupported() {
     PANIC_POSTCONDITION("D3D11::isAutoDepthResolveSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isSRGBSwapChainSupported() {
     PANIC_POSTCONDITION("D3D11::isSRGBSwapChainSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isMSAASwapChainSupported(uint32_t) {
     PANIC_POSTCONDITION("D3D11::isMSAASwapChainSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isProtectedContentSupported() {
     PANIC_POSTCONDITION("D3D11::isProtectedContentSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isStereoSupported() {
     PANIC_POSTCONDITION("D3D11::isStereoSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isParallelShaderCompileSupported() {
     PANIC_POSTCONDITION("D3D11::isParallelShaderCompileSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isDepthStencilResolveSupported() {
     PANIC_POSTCONDITION("D3D11::isDepthStencilResolveSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isDepthStencilBlitSupported(TextureFormat format) {
     PANIC_POSTCONDITION("D3D11::isDepthStencilBlitSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isProtectedTexturesSupported() {
     PANIC_POSTCONDITION("D3D11::isProtectedTexturesSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isDepthClampSupported() {
     PANIC_POSTCONDITION("D3D11::isDepthClampSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isAsynchronousModeEnabled() {
     PANIC_POSTCONDITION("D3D11::isAsynchronousModeEnabled not implemented");
+    return {};
 }
 
 uint8_t D3D11Driver::getMaxDrawBuffers() {
     PANIC_POSTCONDITION("D3D11::getMaxDrawBuffers not implemented");
+    return {};
 }
 
 size_t D3D11Driver::getMaxUniformBufferSize() {
     PANIC_POSTCONDITION("D3D11::getMaxUniformBufferSize not implemented");
+    return {};
 }
 
 size_t D3D11Driver::getMaxTextureSize(SamplerType target) {
     PANIC_POSTCONDITION("D3D11::getMaxTextureSize not implemented");
+    return {};
 }
 
 size_t D3D11Driver::getMaxArrayTextureLayers() {
     PANIC_POSTCONDITION("D3D11::getMaxArrayTextureLayers not implemented");
+    return {};
 }
 
 math::float2 D3D11Driver::getClipSpaceParams() {
     PANIC_POSTCONDITION("D3D11::getClipSpaceParams not implemented");
+    return {};
 }
 
 void D3D11Driver::setupExternalImage2(Platform::ExternalImageHandleRef image) {
@@ -237,40 +348,49 @@ void D3D11Driver::setupExternalImage(void* image) {
 
 TimerQueryResult D3D11Driver::getTimerQueryValue(Handle<HwTimerQuery> tqh, uint64_t* elapsedTime) {
     PANIC_POSTCONDITION("D3D11::getTimerQueryValue not implemented");
+    return {};
 }
 
 bool D3D11Driver::isWorkaroundNeeded(Workaround) {
     PANIC_POSTCONDITION("D3D11::isWorkaroundNeeded not implemented");
+    return {};
 }
 
 FeatureLevel D3D11Driver::getFeatureLevel() {
     PANIC_POSTCONDITION("D3D11::getFeatureLevel not implemented");
+    return {};
 }
 
 size_t D3D11Driver::getUniformBufferOffsetAlignment() {
     PANIC_POSTCONDITION("D3D11::getUniformBufferOffsetAlignment not implemented");
+    return {};
 }
 
 bool D3D11Driver::isCompositorTimingSupported() {
     PANIC_POSTCONDITION("D3D11::isCompositorTimingSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::isPresentationTimeSupported() {
     PANIC_POSTCONDITION("D3D11::isPresentationTimeSupported not implemented");
+    return {};
 }
 
 bool D3D11Driver::queryFrameTimestamps(SwapChainHandle swapChain, uint64_t frameId,
         FrameTimestamps* outFrameTimestamps) {
     PANIC_POSTCONDITION("D3D11::queryFrameTimestamps not implemented");
+    return {};
 }
 
 bool D3D11Driver::queryCompositorTiming(backend::SwapChainHandle swapChain,
         backend::CompositorTiming* outCompositorTiming) {
     PANIC_POSTCONDITION("D3D11::queryCompositorTiming not implemented");
+    return {};
 }
 
 bool D3D11Driver::cancelAsyncJob(AsyncCallId jobId) {
     PANIC_POSTCONDITION("D3D11::cancelAsyncJob not implemented");
+    return {};
 }
 
 SwapChainHandle D3D11Driver::createSwapChainS() noexcept {
@@ -329,7 +449,17 @@ void D3D11Driver::beginRenderPass(RenderTargetHandle target, RenderPassParams co
             << "D3D11 render pass requires a color clear";
     FILAMENT_CHECK_PRECONDITION(params.subpassMask == 0) << "D3D11 subpasses are not supported";
     mRenderPassActive = true;
-    if (mCurrentSwapChain->update(mDevice, mContext)) {
+    mRenderPassDrawable = mCurrentSwapChain->update(mDevice, mContext);
+    if (mRenderPassDrawable) {
+        D3D11_VIEWPORT viewport{};
+        viewport.TopLeftX = float(params.viewport.left);
+        viewport.TopLeftY = float(mCurrentSwapChain->getHeight())
+                - float(params.viewport.bottom) - float(params.viewport.height);
+        viewport.Width = float(params.viewport.width);
+        viewport.Height = float(params.viewport.height);
+        viewport.MinDepth = params.depthRange.near;
+        viewport.MaxDepth = params.depthRange.far;
+        mContext->RSSetViewports(1, &viewport);
         float const color[] = { float(params.clearColor.r), float(params.clearColor.g),
                 float(params.clearColor.b), float(params.clearColor.a) };
         mCurrentSwapChain->clear(mContext, color);
@@ -396,7 +526,7 @@ void D3D11Driver::resetState(int dummy) {
 }
 
 backend::VertexBufferInfoHandle D3D11Driver::createVertexBufferInfoS() noexcept {
-    PANIC_POSTCONDITION("D3D11::createVertexBufferInfoS not implemented");
+    return mHandleAllocator.allocateAndConstruct<D3D11VertexBufferInfo>();
 }
 
 void D3D11Driver::createVertexBufferInfoR(
@@ -405,11 +535,35 @@ void D3D11Driver::createVertexBufferInfoR(
         uint8_t attributeCount,
         backend::AttributeArray attributes,
         utils::ImmutableCString&& tag) {
-    PANIC_POSTCONDITION("D3D11::createVertexBufferInfoR not implemented");
+    mVertexBufferInfos.push_back(handle);
+    FILAMENT_CHECK_PRECONDITION(bufferCount > 0 && bufferCount <= MAX_VERTEX_BUFFER_COUNT)
+            << "Invalid vertex buffer count";
+    uint8_t activeCount = 0;
+    std::array<uint8_t, MAX_VERTEX_BUFFER_COUNT> strides{};
+    for (auto const& attribute : attributes) {
+        if (attribute.buffer == Attribute::BUFFER_UNUSED) {
+            continue;
+        }
+        FILAMENT_CHECK_PRECONDITION(attribute.buffer < bufferCount && attribute.stride > 0
+                && attribute.flags == 0) << "Unsupported D3D11 vertex attribute";
+        getVertexFormat(attribute.type);
+        FILAMENT_CHECK_PRECONDITION(strides[attribute.buffer] == 0
+                || strides[attribute.buffer] == attribute.stride)
+                << "Attributes sharing a buffer must have the same stride";
+        strides[attribute.buffer] = attribute.stride;
+        ++activeCount;
+    }
+    FILAMENT_CHECK_PRECONDITION(activeCount > 0 && activeCount == attributeCount)
+            << "Invalid vertex attribute count";
+    auto* info = mHandleAllocator.handle_cast<D3D11VertexBufferInfo*>(handle);
+    info->bufferCount = bufferCount;
+    info->attributeCount = attributeCount;
+    info->attributes = attributes;
+    mHandleAllocator.associateTagToHandle(handle.getId(), std::move(tag));
 }
 
 backend::VertexBufferHandle D3D11Driver::createVertexBufferS() noexcept {
-    PANIC_POSTCONDITION("D3D11::createVertexBufferS not implemented");
+    return mHandleAllocator.allocateAndConstruct<D3D11VertexBuffer>();
 }
 
 void D3D11Driver::createVertexBufferR(
@@ -417,11 +571,18 @@ void D3D11Driver::createVertexBufferR(
         uint32_t vertexCount,
         backend::VertexBufferInfoHandle vbih,
         utils::ImmutableCString&& tag) {
-    PANIC_POSTCONDITION("D3D11::createVertexBufferR not implemented");
+    mVertexBuffers.push_back(handle);
+    FILAMENT_CHECK_PRECONDITION(vertexCount > 0) << "Empty vertex buffer";
+    mHandleAllocator.handle_cast<D3D11VertexBufferInfo*>(vbih);
+    auto* vertices = mHandleAllocator.handle_cast<D3D11VertexBuffer*>(handle);
+    vertices->vertexCount = vertexCount;
+    vertices->info = vbih;
+    mHandleAllocator.associateTagToHandle(handle.getId(), std::move(tag));
 }
 
 backend::VertexBufferHandle D3D11Driver::createVertexBufferAsyncS() noexcept {
     PANIC_POSTCONDITION("D3D11::createVertexBufferAsyncS not implemented");
+    return {};
 }
 
 void D3D11Driver::createVertexBufferAsyncR(
@@ -436,7 +597,7 @@ void D3D11Driver::createVertexBufferAsyncR(
 }
 
 backend::IndexBufferHandle D3D11Driver::createIndexBufferS() noexcept {
-    PANIC_POSTCONDITION("D3D11::createIndexBufferS not implemented");
+    return mHandleAllocator.allocateAndConstruct<D3D11IndexBuffer>();
 }
 
 void D3D11Driver::createIndexBufferR(
@@ -445,11 +606,26 @@ void D3D11Driver::createIndexBufferR(
         uint32_t indexCount,
         backend::BufferUsage usage,
         utils::ImmutableCString&& tag) {
-    PANIC_POSTCONDITION("D3D11::createIndexBufferR not implemented");
+    mIndexBuffers.push_back(handle);
+    FILAMENT_CHECK_PRECONDITION(elementType == ElementType::USHORT || elementType == ElementType::UINT)
+            << "Unsupported D3D11 index type";
+    FILAMENT_CHECK_PRECONDITION(indexCount > 0 && indexCount < (1u << 26))
+            << "Invalid index count";
+    auto* buffer = mHandleAllocator.handle_cast<D3D11IndexBuffer*>(handle);
+    buffer->count = indexCount;
+    buffer->elementSize = elementType == ElementType::USHORT ? 2 : 4;
+    D3D11_BUFFER_DESC description{};
+    description.ByteWidth = indexCount * buffer->elementSize;
+    description.Usage = D3D11_USAGE_DEFAULT;
+    description.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    HRESULT const result = mDevice->CreateBuffer(&description, nullptr, buffer->buffer.GetAddressOf());
+    FILAMENT_CHECK_POSTCONDITION(SUCCEEDED(result)) << "CreateBuffer failed: " << result;
+    mHandleAllocator.associateTagToHandle(handle.getId(), std::move(tag));
 }
 
 backend::IndexBufferHandle D3D11Driver::createIndexBufferAsyncS() noexcept {
     PANIC_POSTCONDITION("D3D11::createIndexBufferAsyncS not implemented");
+    return {};
 }
 
 void D3D11Driver::createIndexBufferAsyncR(
@@ -465,7 +641,7 @@ void D3D11Driver::createIndexBufferAsyncR(
 }
 
 backend::BufferObjectHandle D3D11Driver::createBufferObjectS() noexcept {
-    PANIC_POSTCONDITION("D3D11::createBufferObjectS not implemented");
+    return mHandleAllocator.allocateAndConstruct<D3D11BufferObject>();
 }
 
 void D3D11Driver::createBufferObjectR(
@@ -474,11 +650,26 @@ void D3D11Driver::createBufferObjectR(
         backend::BufferObjectBinding bindingType,
         backend::BufferUsage usage,
         utils::ImmutableCString&& tag) {
-    PANIC_POSTCONDITION("D3D11::createBufferObjectR not implemented");
+    mBufferObjects.push_back(handle);
+    FILAMENT_CHECK_PRECONDITION(bindingType == BufferObjectBinding::VERTEX)
+            << "D3D11 buffer binding not implemented";
+    FILAMENT_CHECK_PRECONDITION(byteCount > 0 && byteCount < (1u << 31))
+            << "Invalid vertex buffer size";
+    auto* buffer = mHandleAllocator.handle_cast<D3D11BufferObject*>(handle);
+    buffer->byteCount = byteCount;
+    buffer->asynchronous = false;
+    D3D11_BUFFER_DESC description{};
+    description.ByteWidth = byteCount;
+    description.Usage = D3D11_USAGE_DEFAULT;
+    description.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    HRESULT const result = mDevice->CreateBuffer(&description, nullptr, buffer->buffer.GetAddressOf());
+    FILAMENT_CHECK_POSTCONDITION(SUCCEEDED(result)) << "CreateBuffer failed: " << result;
+    mHandleAllocator.associateTagToHandle(handle.getId(), std::move(tag));
 }
 
 backend::BufferObjectHandle D3D11Driver::createBufferObjectAsyncS() noexcept {
     PANIC_POSTCONDITION("D3D11::createBufferObjectAsyncS not implemented");
+    return {};
 }
 
 void D3D11Driver::createBufferObjectAsyncR(
@@ -495,6 +686,7 @@ void D3D11Driver::createBufferObjectAsyncR(
 
 backend::TextureHandle D3D11Driver::createTextureS() noexcept {
     PANIC_POSTCONDITION("D3D11::createTextureS not implemented");
+    return {};
 }
 
 void D3D11Driver::createTextureR(
@@ -513,6 +705,7 @@ void D3D11Driver::createTextureR(
 
 backend::TextureHandle D3D11Driver::createTextureAsyncS() noexcept {
     PANIC_POSTCONDITION("D3D11::createTextureAsyncS not implemented");
+    return {};
 }
 
 void D3D11Driver::createTextureAsyncR(
@@ -534,6 +727,7 @@ void D3D11Driver::createTextureAsyncR(
 
 backend::TextureHandle D3D11Driver::createTextureViewS() noexcept {
     PANIC_POSTCONDITION("D3D11::createTextureViewS not implemented");
+    return {};
 }
 
 void D3D11Driver::createTextureViewR(
@@ -547,6 +741,7 @@ void D3D11Driver::createTextureViewR(
 
 backend::TextureHandle D3D11Driver::createTextureViewSwizzleS() noexcept {
     PANIC_POSTCONDITION("D3D11::createTextureViewSwizzleS not implemented");
+    return {};
 }
 
 void D3D11Driver::createTextureViewSwizzleR(
@@ -562,6 +757,7 @@ void D3D11Driver::createTextureViewSwizzleR(
 
 backend::TextureHandle D3D11Driver::createTextureViewSwizzleAsyncS() noexcept {
     PANIC_POSTCONDITION("D3D11::createTextureViewSwizzleAsyncS not implemented");
+    return {};
 }
 
 void D3D11Driver::createTextureViewSwizzleAsyncR(
@@ -580,6 +776,7 @@ void D3D11Driver::createTextureViewSwizzleAsyncR(
 
 backend::TextureHandle D3D11Driver::createTextureExternalImage2S() noexcept {
     PANIC_POSTCONDITION("D3D11::createTextureExternalImage2S not implemented");
+    return {};
 }
 
 void D3D11Driver::createTextureExternalImage2R(
@@ -596,6 +793,7 @@ void D3D11Driver::createTextureExternalImage2R(
 
 backend::TextureHandle D3D11Driver::createTextureExternalImageS() noexcept {
     PANIC_POSTCONDITION("D3D11::createTextureExternalImageS not implemented");
+    return {};
 }
 
 void D3D11Driver::createTextureExternalImageR(
@@ -612,6 +810,7 @@ void D3D11Driver::createTextureExternalImageR(
 
 backend::TextureHandle D3D11Driver::createTextureExternalImagePlaneS() noexcept {
     PANIC_POSTCONDITION("D3D11::createTextureExternalImagePlaneS not implemented");
+    return {};
 }
 
 void D3D11Driver::createTextureExternalImagePlaneR(
@@ -628,6 +827,7 @@ void D3D11Driver::createTextureExternalImagePlaneR(
 
 backend::TextureHandle D3D11Driver::importTextureS() noexcept {
     PANIC_POSTCONDITION("D3D11::importTextureS not implemented");
+    return {};
 }
 
 void D3D11Driver::importTextureR(
@@ -647,6 +847,7 @@ void D3D11Driver::importTextureR(
 
 backend::TextureHandle D3D11Driver::importTextureAsyncS() noexcept {
     PANIC_POSTCONDITION("D3D11::importTextureAsyncS not implemented");
+    return {};
 }
 
 void D3D11Driver::importTextureAsyncR(
@@ -668,7 +869,7 @@ void D3D11Driver::importTextureAsyncR(
 }
 
 backend::RenderPrimitiveHandle D3D11Driver::createRenderPrimitiveS() noexcept {
-    PANIC_POSTCONDITION("D3D11::createRenderPrimitiveS not implemented");
+    return mHandleAllocator.allocateAndConstruct<D3D11RenderPrimitive>();
 }
 
 void D3D11Driver::createRenderPrimitiveR(
@@ -677,22 +878,58 @@ void D3D11Driver::createRenderPrimitiveR(
         backend::IndexBufferHandle ibh,
         backend::PrimitiveType pt,
         utils::ImmutableCString&& tag) {
-    PANIC_POSTCONDITION("D3D11::createRenderPrimitiveR not implemented");
+    mRenderPrimitives.push_back(handle);
+    FILAMENT_CHECK_PRECONDITION(pt == PrimitiveType::TRIANGLES)
+            << "D3D11 primitive type not implemented";
+    mHandleAllocator.handle_cast<D3D11VertexBuffer*>(vbh);
+    mHandleAllocator.handle_cast<D3D11IndexBuffer*>(ibh);
+    auto* primitive = mHandleAllocator.handle_cast<D3D11RenderPrimitive*>(handle);
+    primitive->vertices = vbh;
+    primitive->indices = ibh;
+    primitive->type = pt;
+    mHandleAllocator.associateTagToHandle(handle.getId(), std::move(tag));
 }
 
 backend::ProgramHandle D3D11Driver::createProgramS() noexcept {
-    PANIC_POSTCONDITION("D3D11::createProgramS not implemented");
+    return mHandleAllocator.allocateAndConstruct<D3D11Program>();
 }
 
 void D3D11Driver::createProgramR(
         backend::ProgramHandle handle,
         backend::Program&& program,
         utils::ImmutableCString&& tag) {
-    PANIC_POSTCONDITION("D3D11::createProgramR not implemented");
+    Program builder(std::move(program));
+    mPrograms.push_back(handle);
+    FILAMENT_CHECK_PRECONDITION(builder.getShaderLanguage() == ShaderLanguage::HLSL)
+            << "D3D11 requires HLSL";
+    FILAMENT_CHECK_PRECONDITION(builder.getSpecializationConstants().empty() && !builder.isMultiview()
+            && builder.getDescriptorSetLayouts().empty()) << "D3D11 program options not implemented";
+    for (auto const& bindings : builder.getDescriptorBindings()) {
+        FILAMENT_CHECK_PRECONDITION(bindings.empty()) << "D3D11 descriptors not implemented";
+    }
+    for (auto stage : { ShaderStage::VERTEX, ShaderStage::FRAGMENT, ShaderStage::COMPUTE }) {
+        FILAMENT_CHECK_PRECONDITION(builder.getPushConstants(stage).empty())
+                << "D3D11 push constants not implemented";
+    }
+    auto* shaders = mHandleAllocator.handle_cast<D3D11Program*>(handle);
+    shaders->name = builder.getName();
+    auto const& sources = builder.getShadersSource();
+    FILAMENT_CHECK_PRECONDITION(sources[size_t(ShaderStage::COMPUTE)].empty())
+            << "D3D11 compute not implemented";
+    shaders->vertexCode = compileShader(sources[size_t(ShaderStage::VERTEX)], "vs_5_0");
+    ComPtr<ID3DBlob> pixelCode = compileShader(sources[size_t(ShaderStage::FRAGMENT)], "ps_5_0");
+    HRESULT result = mDevice->CreateVertexShader(shaders->vertexCode->GetBufferPointer(),
+            shaders->vertexCode->GetBufferSize(), nullptr, shaders->vertexShader.GetAddressOf());
+    FILAMENT_CHECK_POSTCONDITION(SUCCEEDED(result)) << "CreateVertexShader failed: " << result;
+    result = mDevice->CreatePixelShader(pixelCode->GetBufferPointer(), pixelCode->GetBufferSize(),
+            nullptr, shaders->pixelShader.GetAddressOf());
+    FILAMENT_CHECK_POSTCONDITION(SUCCEEDED(result)) << "CreatePixelShader failed: " << result;
+    mHandleAllocator.associateTagToHandle(handle.getId(), std::move(tag));
 }
 
 backend::RenderTargetHandle D3D11Driver::createRenderTargetS() noexcept {
     PANIC_POSTCONDITION("D3D11::createRenderTargetS not implemented");
+    return {};
 }
 
 void D3D11Driver::createRenderTargetR(
@@ -711,6 +948,7 @@ void D3D11Driver::createRenderTargetR(
 
 backend::FenceHandle D3D11Driver::createFenceS() noexcept {
     PANIC_POSTCONDITION("D3D11::createFenceS not implemented");
+    return {};
 }
 
 void D3D11Driver::createFenceR(backend::FenceHandle handle, utils::ImmutableCString&& tag) {
@@ -719,6 +957,7 @@ void D3D11Driver::createFenceR(backend::FenceHandle handle, utils::ImmutableCStr
 
 backend::SyncHandle D3D11Driver::createSyncS() noexcept {
     PANIC_POSTCONDITION("D3D11::createSyncS not implemented");
+    return {};
 }
 
 void D3D11Driver::createSyncR(backend::SyncHandle handle, utils::ImmutableCString&& tag) {
@@ -727,6 +966,7 @@ void D3D11Driver::createSyncR(backend::SyncHandle handle, utils::ImmutableCStrin
 
 backend::SwapChainHandle D3D11Driver::createSwapChainHeadlessS() noexcept {
     PANIC_POSTCONDITION("D3D11::createSwapChainHeadlessS not implemented");
+    return {};
 }
 
 void D3D11Driver::createSwapChainHeadlessR(
@@ -740,6 +980,7 @@ void D3D11Driver::createSwapChainHeadlessR(
 
 backend::TimerQueryHandle D3D11Driver::createTimerQueryS() noexcept {
     PANIC_POSTCONDITION("D3D11::createTimerQueryS not implemented");
+    return {};
 }
 
 void D3D11Driver::createTimerQueryR(backend::TimerQueryHandle handle, utils::ImmutableCString&& tag) {
@@ -748,6 +989,7 @@ void D3D11Driver::createTimerQueryR(backend::TimerQueryHandle handle, utils::Imm
 
 backend::DescriptorSetLayoutHandle D3D11Driver::createDescriptorSetLayoutS() noexcept {
     PANIC_POSTCONDITION("D3D11::createDescriptorSetLayoutS not implemented");
+    return {};
 }
 
 void D3D11Driver::createDescriptorSetLayoutR(
@@ -759,6 +1001,7 @@ void D3D11Driver::createDescriptorSetLayoutR(
 
 backend::DescriptorSetHandle D3D11Driver::createDescriptorSetS() noexcept {
     PANIC_POSTCONDITION("D3D11::createDescriptorSetS not implemented");
+    return {};
 }
 
 void D3D11Driver::createDescriptorSetR(
@@ -770,6 +1013,7 @@ void D3D11Driver::createDescriptorSetR(
 
 backend::MemoryMappedBufferHandle D3D11Driver::mapBufferS() noexcept {
     PANIC_POSTCONDITION("D3D11::mapBufferS not implemented");
+    return {};
 }
 
 void D3D11Driver::mapBufferR(
@@ -783,27 +1027,48 @@ void D3D11Driver::mapBufferR(
 }
 
 void D3D11Driver::destroyVertexBuffer(backend::VertexBufferHandle vbh) {
-    PANIC_POSTCONDITION("D3D11::destroyVertexBuffer not implemented");
+    mHandleAllocator.deallocate<D3D11VertexBuffer>(vbh);
+    std::erase(mVertexBuffers, vbh);
 }
 
 void D3D11Driver::destroyVertexBufferInfo(backend::VertexBufferInfoHandle vbih) {
-    PANIC_POSTCONDITION("D3D11::destroyVertexBufferInfo not implemented");
+    if (mBoundVertexBufferInfo == vbih) {
+        mBoundVertexBufferInfo.clear();
+    }
+    for (auto programHandle : mPrograms) {
+        auto* program = mHandleAllocator.handle_cast<D3D11Program*>(programHandle);
+        std::erase_if(program->inputLayouts, [vbih](auto const& entry) {
+            return entry.info == vbih;
+        });
+    }
+    mHandleAllocator.deallocate<D3D11VertexBufferInfo>(vbih);
+    std::erase(mVertexBufferInfos, vbih);
 }
 
 void D3D11Driver::destroyIndexBuffer(backend::IndexBufferHandle ibh) {
-    PANIC_POSTCONDITION("D3D11::destroyIndexBuffer not implemented");
+    mHandleAllocator.deallocate<D3D11IndexBuffer>(ibh);
+    std::erase(mIndexBuffers, ibh);
 }
 
 void D3D11Driver::destroyBufferObject(backend::BufferObjectHandle boh) {
-    PANIC_POSTCONDITION("D3D11::destroyBufferObject not implemented");
+    mHandleAllocator.deallocate<D3D11BufferObject>(boh);
+    std::erase(mBufferObjects, boh);
 }
 
 void D3D11Driver::destroyRenderPrimitive(backend::RenderPrimitiveHandle rph) {
-    PANIC_POSTCONDITION("D3D11::destroyRenderPrimitive not implemented");
+    if (mBoundPrimitive == rph) {
+        mBoundPrimitive.clear();
+    }
+    mHandleAllocator.deallocate<D3D11RenderPrimitive>(rph);
+    std::erase(mRenderPrimitives, rph);
 }
 
 void D3D11Driver::destroyProgram(backend::ProgramHandle ph) {
-    PANIC_POSTCONDITION("D3D11::destroyProgram not implemented");
+    if (mBoundProgram == ph) {
+        mBoundProgram.clear();
+    }
+    mHandleAllocator.deallocate<D3D11Program>(ph);
+    std::erase(mPrograms, ph);
 }
 
 void D3D11Driver::destroyTexture(backend::TextureHandle th) {
@@ -842,11 +1107,16 @@ void D3D11Driver::setVertexBufferObject(
         backend::VertexBufferHandle vbh,
         uint32_t index,
         backend::BufferObjectHandle bufferObject) {
-    PANIC_POSTCONDITION("D3D11::setVertexBufferObject not implemented");
+    auto* vertices = mHandleAllocator.handle_cast<D3D11VertexBuffer*>(vbh);
+    auto* info = mHandleAllocator.handle_cast<D3D11VertexBufferInfo*>(vertices->info);
+    FILAMENT_CHECK_PRECONDITION(index < info->bufferCount) << "Invalid vertex buffer slot";
+    mHandleAllocator.handle_cast<D3D11BufferObject*>(bufferObject);
+    vertices->buffers[index] = bufferObject;
 }
 
 backend::AsyncCallId D3D11Driver::setVertexBufferObjectAsyncS() noexcept {
     PANIC_POSTCONDITION("D3D11::setVertexBufferObjectAsyncS not implemented");
+    return {};
 }
 
 void D3D11Driver::setVertexBufferObjectAsyncR(
@@ -864,11 +1134,21 @@ void D3D11Driver::updateIndexBuffer(
         backend::IndexBufferHandle ibh,
         backend::BufferDescriptor&& data,
         uint32_t byteOffset) {
-    PANIC_POSTCONDITION("D3D11::updateIndexBuffer not implemented");
+    auto* buffer = mHandleAllocator.handle_cast<D3D11IndexBuffer*>(ibh);
+    uint32_t const capacity = buffer->count * buffer->elementSize;
+    FILAMENT_CHECK_PRECONDITION(byteOffset <= capacity && data.size <= capacity - byteOffset)
+            << "D3D11 buffer update out of bounds";
+    if (data.size) {
+        FILAMENT_CHECK_PRECONDITION(data.buffer) << "Missing D3D11 buffer data";
+        D3D11_BOX const region = { byteOffset, 0, 0, byteOffset + uint32_t(data.size), 1, 1 };
+        mContext->UpdateSubresource(buffer->buffer.Get(), 0, &region, data.buffer, 0, 0);
+    }
+    scheduleDestroy(std::move(data));
 }
 
 backend::AsyncCallId D3D11Driver::updateIndexBufferAsyncS() noexcept {
     PANIC_POSTCONDITION("D3D11::updateIndexBufferAsyncS not implemented");
+    return {};
 }
 
 void D3D11Driver::updateIndexBufferAsyncR(
@@ -886,11 +1166,21 @@ void D3D11Driver::updateBufferObject(
         backend::BufferObjectHandle ibh,
         backend::BufferDescriptor&& data,
         uint32_t byteOffset) {
-    PANIC_POSTCONDITION("D3D11::updateBufferObject not implemented");
+    auto* buffer = mHandleAllocator.handle_cast<D3D11BufferObject*>(ibh);
+    uint32_t const capacity = buffer->byteCount;
+    FILAMENT_CHECK_PRECONDITION(byteOffset <= capacity && data.size <= capacity - byteOffset)
+            << "D3D11 buffer update out of bounds";
+    if (data.size) {
+        FILAMENT_CHECK_PRECONDITION(data.buffer) << "Missing D3D11 buffer data";
+        D3D11_BOX const region = { byteOffset, 0, 0, byteOffset + uint32_t(data.size), 1, 1 };
+        mContext->UpdateSubresource(buffer->buffer.Get(), 0, &region, data.buffer, 0, 0);
+    }
+    scheduleDestroy(std::move(data));
 }
 
 backend::AsyncCallId D3D11Driver::updateBufferObjectAsyncS() noexcept {
     PANIC_POSTCONDITION("D3D11::updateBufferObjectAsyncS not implemented");
+    return {};
 }
 
 void D3D11Driver::updateBufferObjectAsyncR(
@@ -930,6 +1220,7 @@ void D3D11Driver::update3DImage(
 
 backend::AsyncCallId D3D11Driver::update3DImageAsyncS() noexcept {
     PANIC_POSTCONDITION("D3D11::update3DImageAsyncS not implemented");
+    return {};
 }
 
 void D3D11Driver::update3DImageAsyncR(
@@ -1009,11 +1300,81 @@ void D3D11Driver::nextSubpass(int dummy) {
 }
 
 void D3D11Driver::bindPipeline(backend::PipelineState const& state) {
-    PANIC_POSTCONDITION("D3D11::bindPipeline not implemented");
+    FILAMENT_CHECK_PRECONDITION(mRenderPassActive) << "No D3D11 render pass is active";
+    auto const& raster = state.rasterState;
+    FILAMENT_CHECK_PRECONDITION(state.primitiveType == PrimitiveType::TRIANGLES
+            && raster.culling == CullingMode::NONE && !raster.hasBlending()
+            && !raster.depthWrite && raster.depthFunc == SamplerCompareFunc::A
+            && raster.colorWrite && !raster.alphaToCoverage && !raster.depthClamp
+            && !raster.inverseFrontFaces && !state.stencilState.stencilWrite
+            && state.stencilState.front.stencilFunc == SamplerCompareFunc::A
+            && state.stencilState.back.stencilFunc == SamplerCompareFunc::A
+            && state.polygonOffset.slope == 0 && state.polygonOffset.constant == 0)
+            << "D3D11 pipeline state not implemented";
+    for (auto layout : state.pipelineLayout.setLayout) {
+        FILAMENT_CHECK_PRECONDITION(!layout) << "D3D11 descriptors not implemented";
+    }
+    auto* program = mHandleAllocator.handle_cast<D3D11Program*>(state.program);
+    auto* info = mHandleAllocator.handle_cast<D3D11VertexBufferInfo*>(state.vertexBufferInfo);
+    auto layout = std::find_if(program->inputLayouts.begin(), program->inputLayouts.end(),
+            [&state](auto const& entry) { return entry.info == state.vertexBufferInfo; });
+    if (layout == program->inputLayouts.end()) {
+        D3D11_INPUT_ELEMENT_DESC elements[MAX_VERTEX_ATTRIBUTE_COUNT]{};
+        UINT count = 0;
+        for (UINT location = 0; location < info->attributes.size(); ++location) {
+            auto const& attribute = info->attributes[location];
+            if (attribute.buffer == Attribute::BUFFER_UNUSED) {
+                continue;
+            }
+            auto& element = elements[count++];
+            element.SemanticName = "TEXCOORD";
+            element.SemanticIndex = location;
+            element.Format = getVertexFormat(attribute.type);
+            element.InputSlot = attribute.buffer;
+            element.AlignedByteOffset = attribute.offset;
+            element.InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+        }
+        D3D11Program::InputLayout entry{ state.vertexBufferInfo, {} };
+        HRESULT const result = mDevice->CreateInputLayout(elements, count,
+                program->vertexCode->GetBufferPointer(), program->vertexCode->GetBufferSize(),
+                entry.layout.GetAddressOf());
+        FILAMENT_CHECK_POSTCONDITION(SUCCEEDED(result)) << "CreateInputLayout failed: " << result;
+        program->inputLayouts.push_back(std::move(entry));
+        layout = program->inputLayouts.end() - 1;
+    }
+    if (!mRasterizerState) {
+        D3D11_RASTERIZER_DESC description{};
+        description.FillMode = D3D11_FILL_SOLID;
+        description.CullMode = D3D11_CULL_NONE;
+        description.DepthClipEnable = TRUE;
+        HRESULT const result = mDevice->CreateRasterizerState(&description, &mRasterizerState);
+        FILAMENT_CHECK_POSTCONDITION(SUCCEEDED(result)) << "CreateRasterizerState failed: " << result;
+    }
+    if (!mDepthStencilState) {
+        D3D11_DEPTH_STENCIL_DESC description{};
+        description.DepthFunc = D3D11_COMPARISON_ALWAYS;
+        description.FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+        description.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_KEEP;
+        description.FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+        description.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+        description.BackFace = description.FrontFace;
+        HRESULT const result = mDevice->CreateDepthStencilState(&description, &mDepthStencilState);
+        FILAMENT_CHECK_POSTCONDITION(SUCCEEDED(result)) << "CreateDepthStencilState failed: " << result;
+    }
+    mContext->RSSetState(mRasterizerState);
+    mContext->OMSetDepthStencilState(mDepthStencilState, 0);
+    mContext->OMSetBlendState(nullptr, nullptr, 0xffffffffu);
+    mContext->IASetInputLayout(layout->layout.Get());
+    mContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    mContext->VSSetShader(program->vertexShader.Get(), nullptr, 0);
+    mContext->PSSetShader(program->pixelShader.Get(), nullptr, 0);
+    mBoundProgram = state.program;
+    mBoundVertexBufferInfo = state.vertexBufferInfo;
 }
 
 void D3D11Driver::bindRenderPrimitive(backend::RenderPrimitiveHandle rph) {
-    PANIC_POSTCONDITION("D3D11::bindRenderPrimitive not implemented");
+    mHandleAllocator.handle_cast<D3D11RenderPrimitive*>(rph);
+    mBoundPrimitive = rph;
 }
 
 void D3D11Driver::bindDescriptorSet(
@@ -1115,7 +1476,39 @@ void D3D11Driver::blit(
 }
 
 void D3D11Driver::draw2(uint32_t indexOffset, uint32_t indexCount, uint32_t instanceCount) {
-    PANIC_POSTCONDITION("D3D11::draw2 not implemented");
+    FILAMENT_CHECK_PRECONDITION(mRenderPassActive && mBoundProgram && mBoundPrimitive
+            && mBoundVertexBufferInfo) << "Incomplete D3D11 draw state";
+    auto* primitive = mHandleAllocator.handle_cast<D3D11RenderPrimitive*>(mBoundPrimitive);
+    auto* vertices = mHandleAllocator.handle_cast<D3D11VertexBuffer*>(primitive->vertices);
+    auto* indices = mHandleAllocator.handle_cast<D3D11IndexBuffer*>(primitive->indices);
+    FILAMENT_CHECK_PRECONDITION(vertices->info == mBoundVertexBufferInfo)
+            << "D3D11 vertex layout does not match the pipeline";
+    FILAMENT_CHECK_PRECONDITION(indexOffset <= indices->count
+            && indexCount <= indices->count - indexOffset) << "D3D11 index range out of bounds";
+    auto* info = mHandleAllocator.handle_cast<D3D11VertexBufferInfo*>(vertices->info);
+    ID3D11Buffer* buffers[MAX_VERTEX_BUFFER_COUNT]{};
+    UINT strides[MAX_VERTEX_BUFFER_COUNT]{};
+    UINT offsets[MAX_VERTEX_BUFFER_COUNT]{};
+    for (auto const& attribute : info->attributes) {
+        if (attribute.buffer == Attribute::BUFFER_UNUSED) {
+            continue;
+        }
+        auto* buffer = mHandleAllocator.handle_cast<D3D11BufferObject*>(
+                vertices->buffers[attribute.buffer]);
+        uint64_t const required = uint64_t(vertices->vertexCount - 1) * attribute.stride
+                + attribute.offset + getElementTypeSize(attribute.type);
+        FILAMENT_CHECK_PRECONDITION(required <= buffer->byteCount)
+                << "D3D11 vertex buffer is too small";
+        buffers[attribute.buffer] = buffer->buffer.Get();
+        strides[attribute.buffer] = attribute.stride;
+    }
+    if (!mRenderPassDrawable || !indexCount || !instanceCount) {
+        return;
+    }
+    mContext->IASetVertexBuffers(0, info->bufferCount, buffers, strides, offsets);
+    mContext->IASetIndexBuffer(indices->buffer.Get(),
+            indices->elementSize == 2 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT, 0);
+    mContext->DrawIndexedInstanced(indexCount, instanceCount, indexOffset, 0, 0);
 }
 
 void D3D11Driver::drawArrays(uint32_t vertexOffset, uint32_t vertexCount, uint32_t instanceCount) {
@@ -1141,6 +1534,7 @@ void D3D11Driver::scissor(Viewport scissor) {
 
 backend::AsyncCallId D3D11Driver::queueCommandAsyncS() noexcept {
     PANIC_POSTCONDITION("D3D11::queueCommandAsyncS not implemented");
+    return {};
 }
 
 void D3D11Driver::queueCommandAsyncR(

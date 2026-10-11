@@ -46,7 +46,7 @@
 #else
 #define HandleAllocatorGL   HandleAllocator<32,  96, 184>    // ~4520 / pool / MiB
 #endif
-#define HandleAllocatorD3D11 HandleAllocator<32, 64, 128>
+#define HandleAllocatorD3D11 HandleAllocator<32, 64, 256>
 #define HandleAllocatorVK   HandleAllocator<64, 160, 312>    // ~1820 / pool / MiB
 #define HandleAllocatorMTL  HandleAllocator<32,  64, 552>    // ~1660 / pool / MiB
 // TODO WebGPU examine right size of handles

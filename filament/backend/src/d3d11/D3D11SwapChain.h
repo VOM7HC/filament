@@ -35,6 +35,7 @@ struct D3D11SwapChain final : HwSwapChain {
     bool update(ID3D11Device* device, ID3D11DeviceContext* context);
     void clear(ID3D11DeviceContext* context, float const* color);
     void present(ID3D11Device* device);
+    uint32_t getHeight() const noexcept { return mHeight; }
 
 private:
     void createRenderTarget(ID3D11Device* device);

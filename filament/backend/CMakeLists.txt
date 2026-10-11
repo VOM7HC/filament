@@ -415,6 +415,7 @@ if (FILAMENT_SUPPORTS_D3D11)
     list(APPEND PRIVATE_HDRS
             src/d3d11/D3D11Driver.h
             src/d3d11/D3D11DriverFactory.h
+            src/d3d11/D3D11Handles.h
             src/d3d11/D3D11SwapChain.h
     )
     list(APPEND SRCS
@@ -482,7 +483,7 @@ if(FILAMENT_SUPPORTS_OPENGL AND NOT IOS AND NOT ANDROID AND NOT WASM)
 endif()
 
 if (FILAMENT_SUPPORTS_D3D11)
-    target_link_libraries(${TARGET} PRIVATE d3d11 dxgi user32)
+    target_link_libraries(${TARGET} PRIVATE d3d11 d3dcompiler dxgi user32)
 endif()
 
 if (FILAMENT_SUPPORTS_VULKAN)
@@ -625,7 +626,12 @@ if (FILAMENT_BUILD_TESTING)
         target_link_libraries(test_d3d11_device PRIVATE backend)
         set_target_properties(test_d3d11_device PROPERTIES FOLDER Tests)
 
-        add_executable(test_d3d11_window test/test_D3D11Window.cpp)
+        add_executable(test_d3d11_window
+                test/test_D3D11Window.cpp
+                test/D3D11Shader.cpp
+                test/D3D11Shader.h
+                test/TrianglePrimitive.cpp
+                test/TrianglePrimitive.h)
         target_link_libraries(test_d3d11_window PRIVATE backend user32)
         set_target_properties(test_d3d11_window PROPERTIES FOLDER Tests)
     endif()
@@ -694,7 +700,7 @@ if (FILAMENT_BUILD_TESTING)
             spirv-cross-glsl)
         # imageio drives the golden-image comparison and is only built for host
         # platforms (see the IS_HOST_PLATFORM block in the root CMakeLists).
-        # NOTE: this must not be `if (TARGET imageio)` — imageio is added after
+        # NOTE: this must not be `if (TARGET imageio)` â€” imageio is added after
         # filament/backend, so the target does not exist yet at this point.
         if (IS_HOST_PLATFORM)
             list(APPEND BACKEND_TEST_LIBS imageio)

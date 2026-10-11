@@ -14,12 +14,16 @@
  * limitations under the License.
  */
 
+#include "D3D11Shader.h"
+#include "TrianglePrimitive.h"
+
 #include <private/backend/CommandBufferQueue.h>
 #include <private/backend/CommandStream.h>
 #include <private/backend/Driver.h>
 #include <private/backend/PlatformFactory.h>
 
 #include <backend/DriverEnums.h>
+#include <backend/PipelineState.h>
 #include <backend/Platform.h>
 
 #include <utils/compiler.h>
@@ -27,6 +31,7 @@
 
 #include <windows.h>
 
+#include <cstring>
 #include <exception>
 #include <memory>
 
@@ -65,7 +70,7 @@ LRESULT CALLBACK windowProcedure(HWND window, UINT message, WPARAM wParam, LPARA
     return DefWindowProcW(window, message, wParam, lParam);
 }
 
-int runWindow(HWND window, WindowState& state) {
+int runWindow(HWND window, WindowState& state, bool triangle) {
     Backend backend = Backend::D3D11;
     std::unique_ptr<Platform> platform(PlatformFactory::create(&backend));
     if (!platform) {
@@ -107,56 +112,99 @@ int runWindow(HWND window, WindowState& state) {
     RenderTargetHandle const renderTarget = api.createDefaultRenderTarget();
     api.makeCurrent(swapChain, swapChain);
     executeCommands();
-    ShowWindow(window, SW_SHOW);
-    utils::slog.i << "D3D11 window ready: resize, minimize, restore, then close"
-                 << utils::io::endl;
+    std::unique_ptr<test::TrianglePrimitive> primitive;
+    std::unique_ptr<test::D3D11Shader> shader;
+    PipelineState pipeline{};
+    int result = 0;
+#if UTILS_HAS_EXCEPTIONS
+    try {
+#endif
+        if (triangle) {
+            primitive = std::make_unique<test::TrianglePrimitive>(api);
+            executeCommands();
+            shader = std::make_unique<test::D3D11Shader>(api);
+            executeCommands();
+            shader->addProgramToPipelineState(pipeline);
+            pipeline.vertexBufferInfo = primitive->getVertexBufferInfo();
+            pipeline.rasterState.culling = CullingMode::NONE;
+            pipeline.rasterState.depthFunc = SamplerCompareFunc::A;
+            pipeline.rasterState.depthWrite = false;
+            pipeline.rasterState.colorWrite = true;
+        }
+        ShowWindow(window, SW_SHOW);
+        utils::slog.i << "D3D11 window ready: resize, minimize, restore, then close"
+                     << utils::io::endl;
 
-    while (state.running) {
-        MSG message{};
-        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
-            if (message.message == WM_QUIT) {
-                state.running = false;
+        while (state.running) {
+            MSG message{};
+            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+                if (message.message == WM_QUIT) {
+                    state.running = false;
+                    break;
+                }
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+            if (!state.running) {
                 break;
             }
-            TranslateMessage(&message);
-            DispatchMessageW(&message);
-        }
-        if (!state.running) {
-            break;
-        }
-        RECT client{};
-        if (!GetClientRect(window, &client)) {
-            utils::slog.e << "GetClientRect failed: " << GetLastError() << utils::io::endl;
-            return 1;
-        }
-        if (state.minimized || client.right == 0 || client.bottom == 0) {
-            MsgWaitForMultipleObjectsEx(0, nullptr, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-            continue;
+            RECT client{};
+            if (!GetClientRect(window, &client)) {
+                utils::slog.e << "GetClientRect failed: " << GetLastError() << utils::io::endl;
+                result = 1;
+                break;
+            }
+            if (state.minimized || client.right == 0 || client.bottom == 0) {
+                MsgWaitForMultipleObjectsEx(0, nullptr, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+                continue;
+            }
+
+            RenderPassParams params{};
+            params.flags.clear = TargetBufferFlags::COLOR0;
+            params.viewport.width = uint32_t(client.right);
+            params.viewport.height = uint32_t(client.bottom);
+            params.clearColor = { 0.08, 0.25, 0.55, 1.0 };
+            api.beginRenderPass(renderTarget, params);
+            if (triangle) {
+                api.bindPipeline(pipeline);
+                api.bindRenderPrimitive(primitive->getRenderPrimitive());
+                api.draw2(0, 3, 1);
+            }
+            api.endRenderPass();
+            api.commit(swapChain);
+            executeCommands();
+            MsgWaitForMultipleObjectsEx(0, nullptr, 16, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         }
 
-        RenderPassParams params{};
-        params.flags.clear = TargetBufferFlags::COLOR0;
-        params.viewport.width = uint32_t(client.right);
-        params.viewport.height = uint32_t(client.bottom);
-        params.clearColor = { 0.08, 0.25, 0.55, 1.0 };
-        api.beginRenderPass(renderTarget, params);
-        api.endRenderPass();
-        api.commit(swapChain);
-        executeCommands();
-        MsgWaitForMultipleObjectsEx(0, nullptr, 16, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+#if UTILS_HAS_EXCEPTIONS
+    } catch (...) {
+        if (shader || primitive) {
+            shader.reset();
+            primitive.reset();
+            executeCommands();
+        }
+        throw;
     }
-
+#endif
+    shader.reset();
+    primitive.reset();
     api.destroyRenderTarget(renderTarget);
     api.destroySwapChain(swapChain);
     executeCommands();
     driver->terminate();
+    driver->purge();
     utils::slog.i << "D3D11 window shutdown complete" << utils::io::endl;
-    return 0;
+    return result;
 }
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    bool const triangle = argc == 2 && std::strcmp(argv[1], "--triangle") == 0;
+    if (argc > 1 && !triangle) {
+        utils::slog.e << "Usage: test_d3d11_window [--triangle]" << utils::io::endl;
+        return 1;
+    }
     HINSTANCE const instance = GetModuleHandleW(nullptr);
     wchar_t const* className = L"FilamentD3D11Window";
     WNDCLASSEXW windowClass{};
@@ -170,7 +218,8 @@ int main() {
         return 1;
     }
     WindowState state;
-    HWND const window = CreateWindowExW(0, className, L"Filament D3D11 clear / present",
+    wchar_t const* title = triangle ? L"Filament D3D11 triangle" : L"Filament D3D11 clear / present";
+    HWND const window = CreateWindowExW(0, className, title,
             WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 960, 640,
             nullptr, nullptr, instance, &state);
     if (!window) {
@@ -183,7 +232,7 @@ int main() {
 #if UTILS_HAS_EXCEPTIONS
     try {
 #endif
-        result = runWindow(window, state);
+        result = runWindow(window, state, triangle);
 #if UTILS_HAS_EXCEPTIONS
     } catch (std::exception const& error) {
         utils::slog.e << error.what() << utils::io::endl;

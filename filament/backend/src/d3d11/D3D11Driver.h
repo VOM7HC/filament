@@ -36,6 +36,8 @@
 
 struct ID3D11Device;
 struct ID3D11DeviceContext;
+struct ID3D11RasterizerState;
+struct ID3D11DepthStencilState;
 
 namespace filament::backend {
 
@@ -75,6 +77,18 @@ private:
     HandleAllocatorD3D11 mHandleAllocator;
     std::vector<SwapChainHandle> mSwapChains;
     std::vector<RenderTargetHandle> mRenderTargets;
+    std::vector<VertexBufferInfoHandle> mVertexBufferInfos;
+    std::vector<VertexBufferHandle> mVertexBuffers;
+    std::vector<BufferObjectHandle> mBufferObjects;
+    std::vector<IndexBufferHandle> mIndexBuffers;
+    std::vector<RenderPrimitiveHandle> mRenderPrimitives;
+    std::vector<ProgramHandle> mPrograms;
+    ProgramHandle mBoundProgram;
+    VertexBufferInfoHandle mBoundVertexBufferInfo;
+    RenderPrimitiveHandle mBoundPrimitive;
+    ID3D11RasterizerState* mRasterizerState = nullptr;
+    ID3D11DepthStencilState* mDepthStencilState = nullptr;
+    bool mRenderPassDrawable = false;
     D3D11SwapChain* mCurrentSwapChain = nullptr;
     bool mRenderPassActive = false;
 
