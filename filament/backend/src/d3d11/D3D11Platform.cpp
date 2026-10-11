@@ -14,11 +14,30 @@
  * limitations under the License.
  */
 
+#include "d3d11/D3D11Driver.h"
 #include "d3d11/D3D11DriverFactory.h"
 
 #include <backend/platforms/D3D11Platform.h>
 
+#include <utils/Panic.h>
+
 namespace filament::backend {
+
+utils::CString D3D11Platform::getDeviceInfo(DeviceInfoType infoType, Driver* driver) const {
+    if (!driver) {
+        return {};
+    }
+    auto const* d3d11Driver = static_cast<D3D11Driver const*>(driver);
+    switch (infoType) {
+        case DeviceInfoType::D3D11_DEVICE_NAME:
+            return d3d11Driver->getDeviceName();
+        case DeviceInfoType::D3D11_FEATURE_LEVEL:
+            return d3d11Driver->getDeviceFeatureLevel();
+        default:
+            FILAMENT_CHECK_POSTCONDITION(false) << "Unsupported DeviceInfoType for D3D11Platform";
+            return {};
+    }
+}
 
 Driver* D3D11Platform::createDriver(void* sharedContext, DriverConfig const& driverConfig) {
     return D3D11DriverFactory::create(this, sharedContext, driverConfig);

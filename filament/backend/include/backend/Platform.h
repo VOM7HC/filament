@@ -265,6 +265,8 @@ public:
         VULKAN_DEVICE_NAME, //!< VkPhysicalDeviceProperties::deviceName
         VULKAN_DRIVER_NAME, //!< VkPhysicalDeviceDriverProperties::driverName
         VULKAN_DRIVER_INFO, //!< VkPhysicalDeviceDriverProperties::driverInfo
+        D3D11_DEVICE_NAME,  //!< DXGI_ADAPTER_DESC::Description
+        D3D11_FEATURE_LEVEL, //!< D3D_FEATURE_LEVEL
     };
 
     /**

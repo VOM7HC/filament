@@ -26,7 +26,7 @@ namespace filament::backend {
 class D3D11Platform final : public Platform {
 public:
     int getOSVersion() const noexcept override { return 0; }
-    utils::CString getDeviceInfo(DeviceInfoType, Driver*) const override { return {}; }
+    utils::CString getDeviceInfo(DeviceInfoType infoType, Driver* driver) const override;
 
     Driver* createDriver(void* sharedContext, DriverConfig const& driverConfig) override;
 };

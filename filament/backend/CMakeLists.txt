@@ -479,6 +479,10 @@ if(FILAMENT_SUPPORTS_OPENGL AND NOT IOS AND NOT ANDROID AND NOT WASM)
     target_link_libraries(${TARGET} PRIVATE bluegl)
 endif()
 
+if (FILAMENT_SUPPORTS_D3D11)
+    target_link_libraries(${TARGET} PRIVATE d3d11 dxgi)
+endif()
+
 if (FILAMENT_SUPPORTS_VULKAN)
     target_link_libraries(${TARGET} PUBLIC bluevk vkmemalloc smol-v)
     target_link_libraries(${TARGET} PRIVATE SPIRV-Headers)
@@ -614,6 +618,12 @@ endif()
 # Test
 # ==================================================================================================
 if (FILAMENT_BUILD_TESTING)
+    if (FILAMENT_SUPPORTS_D3D11)
+        add_executable(test_d3d11_device test/test_D3D11Device.cpp)
+        target_link_libraries(test_d3d11_device PRIVATE backend)
+        set_target_properties(test_d3d11_device PROPERTIES FOLDER Tests)
+    endif()
+
     if (APPLE OR LINUX)
         set(BACKEND_TEST_SRC
             test/BackendTest.cpp

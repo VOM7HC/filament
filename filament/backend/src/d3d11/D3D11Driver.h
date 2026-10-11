@@ -27,12 +27,25 @@
 #include <backend/Program.h>
 #include <backend/Platform.h>
 
+#include <utils/CString.h>
 #include <utils/FixedCapacityVector.h>
+
+struct ID3D11Device;
+struct ID3D11DeviceContext;
 
 namespace filament::backend {
 
 class D3D11Driver final : public DriverBase {
-    explicit D3D11Driver(Platform::DriverConfig const& driverConfig) noexcept;
+public:
+    utils::CString const& getDeviceName() const noexcept { return mDeviceName; }
+    utils::CString const& getDeviceFeatureLevel() const noexcept { return mDeviceFeatureLevel; }
+
+private:
+    friend class D3D11DriverFactory;
+
+    D3D11Driver(Platform::DriverConfig const& driverConfig, ID3D11Device* device,
+            ID3D11DeviceContext* context, utils::CString deviceName,
+            utils::CString deviceFeatureLevel) noexcept;
     ~D3D11Driver() noexcept override;
 
     Dispatcher getDispatcher() const noexcept override;
@@ -51,9 +64,7 @@ class D3D11Driver final : public DriverBase {
         unsupported(#methodName); \
     }
 #define DECL_DRIVER_API_SYNCHRONOUS(RetType, methodName, paramsDecl, params) \
-    RetType methodName(paramsDecl) override { \
-        unsupported(#methodName); \
-    }
+    RetType methodName(paramsDecl) override;
 #define DECL_DRIVER_API_RETURN(RetType, methodName, paramsDecl, params) \
     RetType methodName##S() noexcept override { \
         unsupported(#methodName "S"); \
@@ -62,6 +73,11 @@ class D3D11Driver final : public DriverBase {
         unsupported(#methodName "R"); \
     }
 #include <private/backend/DriverAPI.inc>
+
+    ID3D11Device* mDevice;
+    ID3D11DeviceContext* mContext;
+    utils::CString mDeviceName;
+    utils::CString mDeviceFeatureLevel;
 };
 
 } // namespace filament::backend
