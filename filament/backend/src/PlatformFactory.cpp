@@ -20,6 +20,10 @@
 
 #include <utils/debug.h>
 
+#if defined(FILAMENT_SUPPORTS_D3D11)
+    #include <backend/platforms/D3D11Platform.h>
+#endif
+
 // We need to keep this up top for the linux (X11) name collisions.
 #if defined(FILAMENT_SUPPORTS_WEBGPU)
     #if defined(__ANDROID__)
@@ -111,12 +115,14 @@ Platform* PlatformFactory::create(Backend* backend) noexcept {
         *backend = Backend::METAL;
 #elif defined(FILAMENT_DRIVER_SUPPORTS_VULKAN)
         *backend = Backend::VULKAN;
+#elif defined(FILAMENT_SUPPORTS_D3D11)
+        *backend = Backend::D3D11;
 #else
         *backend = Backend::OPENGL;
 #endif
     }
     if (*backend == Backend::NOOP) {
-        return new PlatformNoop();
+            return new PlatformNoop();
     }
     if (*backend == Backend::VULKAN) {
         #if defined(FILAMENT_DRIVER_SUPPORTS_VULKAN)
@@ -157,6 +163,13 @@ Platform* PlatformFactory::create(Backend* backend) noexcept {
     if (*backend == Backend::METAL) {
 #if defined(FILAMENT_SUPPORTS_METAL)
         return createDefaultMetalPlatform();
+#else
+        return nullptr;
+#endif
+    }
+    if (*backend == Backend::D3D11) {
+#if defined(FILAMENT_SUPPORTS_D3D11)
+        return new D3D11Platform();
 #else
         return nullptr;
 #endif

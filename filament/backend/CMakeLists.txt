@@ -410,8 +410,24 @@ include_directories(${PUBLIC_HDR_DIR})
 include_directories(src)
 include_directories(${GENERATION_ROOT})
 
+if (FILAMENT_SUPPORTS_D3D11)
+    list(APPEND PUBLIC_HDRS include/backend/platforms/D3D11Platform.h)
+    list(APPEND PRIVATE_HDRS
+            src/d3d11/D3D11Driver.h
+            src/d3d11/D3D11DriverFactory.h
+    )
+    list(APPEND SRCS
+            src/d3d11/D3D11Driver.cpp
+            src/d3d11/D3D11DriverFactory.cpp
+            src/d3d11/D3D11Platform.cpp
+    )
+endif()
+
 # we're building a library
 add_library(${TARGET} STATIC ${PRIVATE_HDRS} ${PUBLIC_HDRS} ${SRCS})
+if (FILAMENT_SUPPORTS_D3D11)
+    target_compile_definitions(${TARGET} PRIVATE FILAMENT_SUPPORTS_D3D11)
+endif()
 
 # specify where the public headers of this library are
 target_include_directories(${TARGET} PUBLIC ${PUBLIC_HDR_DIR})

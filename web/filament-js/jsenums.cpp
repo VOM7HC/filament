@@ -471,6 +471,7 @@ enum_<ktxreader::Ktx2Reader::Result>("Ktx2Reader$Result")
         .value("VULKAN", backend::Backend::VULKAN)
         .value("METAL", backend::Backend::METAL)
         .value("WEBGPU", backend::Backend::WEBGPU)
+        .value("D3D11", backend::Backend::D3D11)
         .value("NOOP", backend::Backend::NOOP);
 
     enum_<filament::viewer::ToneMapping>("viewer$ToneMapping")

@@ -178,7 +178,8 @@ enum class Backend : uint8_t {
     VULKAN = 2,   //!< Selects the Vulkan driver if the platform supports it (default on Linux/Windows)
     METAL = 3,    //!< Selects the Metal driver if the platform supports it (default on MacOS/iOS).
     WEBGPU = 4,   //!< Selects the Webgpu driver if the platform supports webgpu.
-    NOOP = 5,     //!< Selects the no-op driver for testing purposes.
+    D3D11 = 5,    //!< Selects the Direct3D 11 driver on Windows desktop.
+    NOOP = 6,     //!< Selects the no-op driver for testing purposes.
 };
 
 enum class TimerQueryResult : int8_t {
@@ -199,6 +200,8 @@ constexpr std::string_view to_string(Backend const backend) noexcept {
             return "Metal";
         case Backend::WEBGPU:
             return "WebGPU";
+        case Backend::D3D11:
+            return "D3D11";
         case Backend::DEFAULT:
             return "Default";
     }

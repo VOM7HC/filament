@@ -80,6 +80,7 @@ public:
         VULKAN      = 0x02u,
         METAL       = 0x04u,
         WEBGPU        = 0x08u,
+        D3D11       = 0x10u,
 #ifdef FILAMENT_SUPPORTS_WEBGPU
         ALL         = OPENGL | VULKAN | METAL | WEBGPU
 #else
@@ -175,6 +176,7 @@ inline constexpr MaterialBuilderBase::TargetApi targetApiFromBackend(
         case Backend::METAL:   return TargetApi::METAL;
         case Backend::WEBGPU:    return TargetApi::WEBGPU;
         case Backend::NOOP:    return TargetApi::OPENGL;
+        case Backend::D3D11:   return TargetApi::D3D11;
     }
 }
 

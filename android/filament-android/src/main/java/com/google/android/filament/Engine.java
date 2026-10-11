@@ -140,6 +140,8 @@ public class Engine {
         METAL,
         /** Selects the Webgpu driver if the platform supports webgpu. */
         WEBGPU,
+        /** Selects the Direct3D 11 driver on Windows desktop. */
+        D3D11,
         /** Selects the no-op driver for testing purposes. */
         NOOP;
 

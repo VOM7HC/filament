@@ -54,6 +54,7 @@ export enum Backend {
     VULKAN,
     METAL,
     WEBGPU,
+    D3D11,
     NOOP,
 }
 
