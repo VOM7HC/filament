@@ -221,6 +221,7 @@ enum class ShaderLanguage {
     MSL = 3,
     METAL_LIBRARY = 4,
     WGSL = 5,
+    HLSL = 6,
 };
 
 constexpr std::string_view to_string(ShaderLanguage shaderLanguage) noexcept {
@@ -237,6 +238,8 @@ constexpr std::string_view to_string(ShaderLanguage shaderLanguage) noexcept {
             return "Metal precompiled library";
         case ShaderLanguage::WGSL:
             return "WGSL";
+        case ShaderLanguage::HLSL:
+            return "HLSL";
         case ShaderLanguage::UNSPECIFIED:
             return "Unspecified";
     }

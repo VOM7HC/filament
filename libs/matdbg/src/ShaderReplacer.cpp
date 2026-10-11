@@ -148,6 +148,8 @@ ShaderReplacer::ShaderReplacer(Backend backend, ShaderLanguage language,
             mMaterialTag = ChunkType::MaterialMetalLibrary;
             mDictionaryTag = ChunkType::DictionaryMetalLibrary;
             break;
+        case backend::ShaderLanguage::HLSL:
+            break;
         case backend::ShaderLanguage::UNSPECIFIED:
             // can never happen
             break;

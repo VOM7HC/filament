@@ -71,195 +71,191 @@ ShaderModel D3D11Driver::getShaderModel() const noexcept {
 
 utils::FixedCapacityVector<ShaderLanguage> D3D11Driver::getShaderLanguages(
         ShaderLanguage /*preferredLanguage*/) const noexcept {
-    return {};
-}
-
-void D3D11Driver::unsupported(char const* method) noexcept {
-    PANIC_POSTCONDITION("D3D11 operation not implemented: %s", method);
+    return { ShaderLanguage::HLSL };
 }
 
 Handle<HwStream> D3D11Driver::createStreamNative(void* nativeStream, utils::ImmutableCString tag) {
-    unsupported("createStreamNative");
+    PANIC_POSTCONDITION("D3D11::createStreamNative not implemented");
 }
 
 Handle<HwStream> D3D11Driver::createStreamAcquired(utils::ImmutableCString tag) {
-    unsupported("createStreamAcquired");
+    PANIC_POSTCONDITION("D3D11::createStreamAcquired not implemented");
 }
 
 void D3D11Driver::setAcquiredImage(Handle<HwStream> sh, void* image, const math::mat3f& transform,
         CallbackHandler* handler, StreamCallback cb, void* userData) {
-    unsupported("setAcquiredImage");
+    PANIC_POSTCONDITION("D3D11::setAcquiredImage not implemented");
 }
 
 void D3D11Driver::setStreamDimensions(Handle<HwStream> sh, uint32_t width, uint32_t height) {
-    unsupported("setStreamDimensions");
+    PANIC_POSTCONDITION("D3D11::setStreamDimensions not implemented");
 }
 
 int64_t D3D11Driver::getStreamTimestamp(Handle<HwStream> sh) {
-    unsupported("getStreamTimestamp");
+    PANIC_POSTCONDITION("D3D11::getStreamTimestamp not implemented");
 }
 
 void D3D11Driver::updateStreams(CommandStream* driver) {
-    unsupported("updateStreams");
+    PANIC_POSTCONDITION("D3D11::updateStreams not implemented");
 }
 
 FenceStatus D3D11Driver::getFenceStatus(Handle<HwFence> fh) {
-    unsupported("getFenceStatus");
+    PANIC_POSTCONDITION("D3D11::getFenceStatus not implemented");
 }
 
 FenceStatus D3D11Driver::fenceWait(Handle<HwFence> fh, uint64_t timeout) {
-    unsupported("fenceWait");
+    PANIC_POSTCONDITION("D3D11::fenceWait not implemented");
 }
 
 void D3D11Driver::fenceCancel(FenceHandle fh) {
-    unsupported("fenceCancel");
+    PANIC_POSTCONDITION("D3D11::fenceCancel not implemented");
 }
 
 void D3D11Driver::getPlatformSync(Handle<HwSync> sh, CallbackHandler* handler,
         Platform::SyncCallback cb, void* userData) {
-    unsupported("getPlatformSync");
+    PANIC_POSTCONDITION("D3D11::getPlatformSync not implemented");
 }
 
 bool D3D11Driver::isTextureFormatSupported(TextureFormat format) {
-    unsupported("isTextureFormatSupported");
+    PANIC_POSTCONDITION("D3D11::isTextureFormatSupported not implemented");
 }
 
 bool D3D11Driver::isTextureSwizzleSupported() {
-    unsupported("isTextureSwizzleSupported");
+    PANIC_POSTCONDITION("D3D11::isTextureSwizzleSupported not implemented");
 }
 
 bool D3D11Driver::isTextureFormatMipmappable(TextureFormat format) {
-    unsupported("isTextureFormatMipmappable");
+    PANIC_POSTCONDITION("D3D11::isTextureFormatMipmappable not implemented");
 }
 
 bool D3D11Driver::isTextureFormatFilterable(TextureFormat format) {
-    unsupported("isTextureFormatFilterable");
+    PANIC_POSTCONDITION("D3D11::isTextureFormatFilterable not implemented");
 }
 
 bool D3D11Driver::isRenderTargetFormatSupported(TextureFormat format) {
-    unsupported("isRenderTargetFormatSupported");
+    PANIC_POSTCONDITION("D3D11::isRenderTargetFormatSupported not implemented");
 }
 
 bool D3D11Driver::isFrameBufferFetchSupported() {
-    unsupported("isFrameBufferFetchSupported");
+    PANIC_POSTCONDITION("D3D11::isFrameBufferFetchSupported not implemented");
 }
 
 bool D3D11Driver::isFrameBufferFetchMultiSampleSupported() {
-    unsupported("isFrameBufferFetchMultiSampleSupported");
+    PANIC_POSTCONDITION("D3D11::isFrameBufferFetchMultiSampleSupported not implemented");
 }
 
 bool D3D11Driver::isFrameTimeSupported() {
-    unsupported("isFrameTimeSupported");
+    PANIC_POSTCONDITION("D3D11::isFrameTimeSupported not implemented");
 }
 
 bool D3D11Driver::isAutoDepthResolveSupported() {
-    unsupported("isAutoDepthResolveSupported");
+    PANIC_POSTCONDITION("D3D11::isAutoDepthResolveSupported not implemented");
 }
 
 bool D3D11Driver::isSRGBSwapChainSupported() {
-    unsupported("isSRGBSwapChainSupported");
+    PANIC_POSTCONDITION("D3D11::isSRGBSwapChainSupported not implemented");
 }
 
 bool D3D11Driver::isMSAASwapChainSupported(uint32_t) {
-    unsupported("isMSAASwapChainSupported");
+    PANIC_POSTCONDITION("D3D11::isMSAASwapChainSupported not implemented");
 }
 
 bool D3D11Driver::isProtectedContentSupported() {
-    unsupported("isProtectedContentSupported");
+    PANIC_POSTCONDITION("D3D11::isProtectedContentSupported not implemented");
 }
 
 bool D3D11Driver::isStereoSupported() {
-    unsupported("isStereoSupported");
+    PANIC_POSTCONDITION("D3D11::isStereoSupported not implemented");
 }
 
 bool D3D11Driver::isParallelShaderCompileSupported() {
-    unsupported("isParallelShaderCompileSupported");
+    PANIC_POSTCONDITION("D3D11::isParallelShaderCompileSupported not implemented");
 }
 
 bool D3D11Driver::isDepthStencilResolveSupported() {
-    unsupported("isDepthStencilResolveSupported");
+    PANIC_POSTCONDITION("D3D11::isDepthStencilResolveSupported not implemented");
 }
 
 bool D3D11Driver::isDepthStencilBlitSupported(TextureFormat format) {
-    unsupported("isDepthStencilBlitSupported");
+    PANIC_POSTCONDITION("D3D11::isDepthStencilBlitSupported not implemented");
 }
 
 bool D3D11Driver::isProtectedTexturesSupported() {
-    unsupported("isProtectedTexturesSupported");
+    PANIC_POSTCONDITION("D3D11::isProtectedTexturesSupported not implemented");
 }
 
 bool D3D11Driver::isDepthClampSupported() {
-    unsupported("isDepthClampSupported");
+    PANIC_POSTCONDITION("D3D11::isDepthClampSupported not implemented");
 }
 
 bool D3D11Driver::isAsynchronousModeEnabled() {
-    unsupported("isAsynchronousModeEnabled");
+    PANIC_POSTCONDITION("D3D11::isAsynchronousModeEnabled not implemented");
 }
 
 uint8_t D3D11Driver::getMaxDrawBuffers() {
-    unsupported("getMaxDrawBuffers");
+    PANIC_POSTCONDITION("D3D11::getMaxDrawBuffers not implemented");
 }
 
 size_t D3D11Driver::getMaxUniformBufferSize() {
-    unsupported("getMaxUniformBufferSize");
+    PANIC_POSTCONDITION("D3D11::getMaxUniformBufferSize not implemented");
 }
 
 size_t D3D11Driver::getMaxTextureSize(SamplerType target) {
-    unsupported("getMaxTextureSize");
+    PANIC_POSTCONDITION("D3D11::getMaxTextureSize not implemented");
 }
 
 size_t D3D11Driver::getMaxArrayTextureLayers() {
-    unsupported("getMaxArrayTextureLayers");
+    PANIC_POSTCONDITION("D3D11::getMaxArrayTextureLayers not implemented");
 }
 
 math::float2 D3D11Driver::getClipSpaceParams() {
-    unsupported("getClipSpaceParams");
+    PANIC_POSTCONDITION("D3D11::getClipSpaceParams not implemented");
 }
 
 void D3D11Driver::setupExternalImage2(Platform::ExternalImageHandleRef image) {
-    unsupported("setupExternalImage2");
+    PANIC_POSTCONDITION("D3D11::setupExternalImage2 not implemented");
 }
 
 void D3D11Driver::setupExternalImage(void* image) {
-    unsupported("setupExternalImage");
+    PANIC_POSTCONDITION("D3D11::setupExternalImage not implemented");
 }
 
 TimerQueryResult D3D11Driver::getTimerQueryValue(Handle<HwTimerQuery> tqh, uint64_t* elapsedTime) {
-    unsupported("getTimerQueryValue");
+    PANIC_POSTCONDITION("D3D11::getTimerQueryValue not implemented");
 }
 
 bool D3D11Driver::isWorkaroundNeeded(Workaround) {
-    unsupported("isWorkaroundNeeded");
+    PANIC_POSTCONDITION("D3D11::isWorkaroundNeeded not implemented");
 }
 
 FeatureLevel D3D11Driver::getFeatureLevel() {
-    unsupported("getFeatureLevel");
+    PANIC_POSTCONDITION("D3D11::getFeatureLevel not implemented");
 }
 
 size_t D3D11Driver::getUniformBufferOffsetAlignment() {
-    unsupported("getUniformBufferOffsetAlignment");
+    PANIC_POSTCONDITION("D3D11::getUniformBufferOffsetAlignment not implemented");
 }
 
 bool D3D11Driver::isCompositorTimingSupported() {
-    unsupported("isCompositorTimingSupported");
+    PANIC_POSTCONDITION("D3D11::isCompositorTimingSupported not implemented");
 }
 
 bool D3D11Driver::isPresentationTimeSupported() {
-    unsupported("isPresentationTimeSupported");
+    PANIC_POSTCONDITION("D3D11::isPresentationTimeSupported not implemented");
 }
 
 bool D3D11Driver::queryFrameTimestamps(SwapChainHandle swapChain, uint64_t frameId,
         FrameTimestamps* outFrameTimestamps) {
-    unsupported("queryFrameTimestamps");
+    PANIC_POSTCONDITION("D3D11::queryFrameTimestamps not implemented");
 }
 
 bool D3D11Driver::queryCompositorTiming(backend::SwapChainHandle swapChain,
         backend::CompositorTiming* outCompositorTiming) {
-    unsupported("queryCompositorTiming");
+    PANIC_POSTCONDITION("D3D11::queryCompositorTiming not implemented");
 }
 
 bool D3D11Driver::cancelAsyncJob(AsyncCallId jobId) {
-    unsupported("cancelAsyncJob");
+    PANIC_POSTCONDITION("D3D11::cancelAsyncJob not implemented");
 }
 
 template class ConcreteDispatcher<D3D11Driver>;

@@ -73,6 +73,7 @@ constexpr std::pair<ChunkType, ChunkType> shaderLanguageToTags(ShaderLanguage co
             return { MaterialSpirv, DictionarySpirv };
         case ShaderLanguage::METAL_LIBRARY:
             return { MaterialMetalLibrary, DictionaryMetalLibrary };
+        case ShaderLanguage::HLSL:
         case ShaderLanguage::UNSPECIFIED:
             return {};
     }

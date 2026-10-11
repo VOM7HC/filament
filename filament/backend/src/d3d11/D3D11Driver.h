@@ -29,6 +29,7 @@
 
 #include <utils/CString.h>
 #include <utils/FixedCapacityVector.h>
+#include <utils/Panic.h>
 
 struct ID3D11Device;
 struct ID3D11DeviceContext;
@@ -56,21 +57,19 @@ private:
     template<typename T>
     friend class ConcreteDispatcher;
 
-    [[noreturn]] static void unsupported(char const* method) noexcept;
-
     // Driver API
 #define DECL_DRIVER_API(methodName, paramsDecl, params) \
     void methodName(paramsDecl) { \
-        unsupported(#methodName); \
+        PANIC_POSTCONDITION("D3D11::" #methodName " not implemented"); \
     }
 #define DECL_DRIVER_API_SYNCHRONOUS(RetType, methodName, paramsDecl, params) \
     RetType methodName(paramsDecl) override;
 #define DECL_DRIVER_API_RETURN(RetType, methodName, paramsDecl, params) \
     RetType methodName##S() noexcept override { \
-        unsupported(#methodName "S"); \
+        PANIC_POSTCONDITION("D3D11::" #methodName "S not implemented"); \
     } \
     void methodName##R(RetType, paramsDecl) { \
-        unsupported(#methodName "R"); \
+        PANIC_POSTCONDITION("D3D11::" #methodName "R not implemented"); \
     }
 #include <private/backend/DriverAPI.inc>
 

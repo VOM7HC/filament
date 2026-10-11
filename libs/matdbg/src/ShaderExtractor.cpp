@@ -66,6 +66,8 @@ ShaderExtractor::ShaderExtractor(backend::ShaderLanguage target, const void* dat
             mMaterialTag = ChunkType::MaterialSpirv;
             mDictionaryTag = ChunkType::DictionarySpirv;
             break;
+        case backend::ShaderLanguage::HLSL:
+            break;
         case backend::ShaderLanguage::UNSPECIFIED:
             // that cannot happen
             break;
