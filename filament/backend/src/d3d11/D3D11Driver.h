@@ -20,6 +20,7 @@
 #include "DriverBase.h"
 
 #include <private/backend/Driver.h>
+#include <private/backend/HandleAllocator.h>
 
 #include <backend/BufferDescriptor.h>
 #include <backend/DriverEnums.h>
@@ -31,10 +32,14 @@
 #include <utils/FixedCapacityVector.h>
 #include <utils/Panic.h>
 
+#include <vector>
+
 struct ID3D11Device;
 struct ID3D11DeviceContext;
 
 namespace filament::backend {
+
+struct D3D11SwapChain;
 
 class D3D11Driver final : public DriverBase {
 public:
@@ -59,19 +64,19 @@ private:
 
     // Driver API
 #define DECL_DRIVER_API(methodName, paramsDecl, params) \
-    void methodName(paramsDecl) { \
-        PANIC_POSTCONDITION("D3D11::" #methodName " not implemented"); \
-    }
+    void methodName(paramsDecl);
 #define DECL_DRIVER_API_SYNCHRONOUS(RetType, methodName, paramsDecl, params) \
     RetType methodName(paramsDecl) override;
 #define DECL_DRIVER_API_RETURN(RetType, methodName, paramsDecl, params) \
-    RetType methodName##S() noexcept override { \
-        PANIC_POSTCONDITION("D3D11::" #methodName "S not implemented"); \
-    } \
-    void methodName##R(RetType, paramsDecl) { \
-        PANIC_POSTCONDITION("D3D11::" #methodName "R not implemented"); \
-    }
+    RetType methodName##S() noexcept override; \
+    void methodName##R(RetType, paramsDecl);
 #include <private/backend/DriverAPI.inc>
+
+    HandleAllocatorD3D11 mHandleAllocator;
+    std::vector<SwapChainHandle> mSwapChains;
+    std::vector<RenderTargetHandle> mRenderTargets;
+    D3D11SwapChain* mCurrentSwapChain = nullptr;
+    bool mRenderPassActive = false;
 
     ID3D11Device* mDevice;
     ID3D11DeviceContext* mContext;

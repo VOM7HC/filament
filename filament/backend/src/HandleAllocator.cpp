@@ -255,6 +255,10 @@ void DebugTag::writeHeapHandleTag(HandleBase::HandleId key, ImmutableCString&& t
 }
 
 // Explicit template instantiations.
+#if defined(FILAMENT_SUPPORTS_D3D11)
+template class HandleAllocatorD3D11;
+#endif
+
 #if defined (FILAMENT_SUPPORTS_OPENGL)
 template class HandleAllocatorGL;
 #endif

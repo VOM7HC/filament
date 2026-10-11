@@ -415,11 +415,13 @@ if (FILAMENT_SUPPORTS_D3D11)
     list(APPEND PRIVATE_HDRS
             src/d3d11/D3D11Driver.h
             src/d3d11/D3D11DriverFactory.h
+            src/d3d11/D3D11SwapChain.h
     )
     list(APPEND SRCS
             src/d3d11/D3D11Driver.cpp
             src/d3d11/D3D11DriverFactory.cpp
             src/d3d11/D3D11Platform.cpp
+            src/d3d11/D3D11SwapChain.cpp
     )
 endif()
 
@@ -480,7 +482,7 @@ if(FILAMENT_SUPPORTS_OPENGL AND NOT IOS AND NOT ANDROID AND NOT WASM)
 endif()
 
 if (FILAMENT_SUPPORTS_D3D11)
-    target_link_libraries(${TARGET} PRIVATE d3d11 dxgi)
+    target_link_libraries(${TARGET} PRIVATE d3d11 dxgi user32)
 endif()
 
 if (FILAMENT_SUPPORTS_VULKAN)
@@ -622,6 +624,10 @@ if (FILAMENT_BUILD_TESTING)
         add_executable(test_d3d11_device test/test_D3D11Device.cpp)
         target_link_libraries(test_d3d11_device PRIVATE backend)
         set_target_properties(test_d3d11_device PROPERTIES FOLDER Tests)
+
+        add_executable(test_d3d11_window test/test_D3D11Window.cpp)
+        target_link_libraries(test_d3d11_window PRIVATE backend user32)
+        set_target_properties(test_d3d11_window PROPERTIES FOLDER Tests)
     endif()
 
     if (APPLE OR LINUX)
